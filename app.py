@@ -1,15 +1,18 @@
+# app.py
 import dash
-from dash import dcc, html
+from dash import html, dcc
 from dash.dependencies import Input, Output, State
 import dash_bootstrap_components as dbc
-import pandas as pd
 import numpy as np
-import tensorflow
-from sklearn.preprocessing import StandardScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
+import joblib
+import pandas as pd
 import plotly.express as px
+from tensorflow.keras.models import load_model
 import os
+
+# Load the model and scaler
+model = load_model("churn_prediction_model.h5")
+scaler = joblib.load("scaler.pkl")
 
 # Path to CSV files
 csv_file_path = "churn-bigml-80.csv"
@@ -17,16 +20,6 @@ Procesed_data_csv = 'ProcessedData.csv'
 
 # Load and preprocess data
 df = pd.read_csv(csv_file_path)
-df.drop(columns=['Area code', 'State'], inplace=True)
-
-#combine redundant columns and drop them
-df['Total Calls'] = (df['Total day calls'] + df['Total eve calls'] + df['Total night calls'] + df['Total intl calls'])
-df['Total Minutes'] = ( df['Total day minutes'] +df['Total eve minutes'] +df['Total night minutes']+df['Total intl minutes'])
-df['Total Charge'] = (df['Total day charge'] +df['Total eve charge'] + df['Total night charge']+df['Total intl charge'])
-df['Plan'] = ((df['International plan'] == 'Yes') | (df['Voice mail plan'] == 'Yes')).astype(bool)
-df.drop(columns=['Voice mail plan','International plan','Number vmail messages','Total eve calls','Total eve charge','Total eve minutes',
-                 'Total day calls','Total day charge','Total day minutes','Total night calls','Total night charge','Total night minutes',
-                 'Total intl charge','Total intl minutes','Total intl calls'], inplace= True)
 
 churn_counts = df['Churn'].value_counts()
 churn_bar_chart = px.bar(
@@ -58,31 +51,9 @@ stats_layout = html.Div([
 ])
 
 
-
-X = df.drop("Churn", axis=1)
-y = df["Churn"]
-
-# Scale features
-scaler = StandardScaler()
-X_scaled = scaler.fit_transform(X)
-
-# Build the MLP model
-mlp_model = Sequential([
-    Dense(64, activation='relu', input_shape=(X_scaled.shape[1],)),
-    Dropout(0.5),
-    Dense(32, activation='relu'),
-    Dropout(0.3),
-    Dense(1, activation='sigmoid')
-])
-mlp_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-mlp_model.fit(X_scaled, y, epochs=10, batch_size=32, verbose=0)
-
 # Initialize Dash app with Bootstrap
 app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 app.title = "Churn Prediction App"
-
-# Layout with cards and responsive form
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 # Define the app layout
 app.layout = dbc.Container([
@@ -211,7 +182,7 @@ def predict_churn(n_clicks, al, ip, tc, tm, tcharge, csc):
         input_scaled = scaler.transform(input_data)
 
         # Make prediction
-        prediction = mlp_model.predict(input_scaled)[0][0]
+        prediction = model.predict(input_scaled)[0][0]
 
         # Determine churn likelihood
         churn_label = "Likely to Churn" if prediction >= 0.5 else "Not Likely to Churn"
